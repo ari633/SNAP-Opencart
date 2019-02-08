@@ -24,12 +24,22 @@ class ControllerPaymentSnap extends Controller {
 
   public function index() {
 
+    if ($this->request->server['HTTPS']) {
+      $data['base'] = $this->config->get('config_ssl');
+    } else {
+      $data['base'] = $this->config->get('config_url');
+    }
+
     $data['errors'] = array();
     $data['button_confirm'] = $this->language->get('button_confirm');
+
+    $env = $this->config->get('snap_environment') == 'production' ? true : false;
+    $data['mixpanel_key'] = $env == true ? "17253088ed3a39b1e2bd2cbcfeca939a" : "9dcba9b440c831d517e8ff1beff40bd9";
 
   	$data['pay_type'] = 'snap';
     $data['environment'] = $this->config->get('snap_environment');
     $data['client_key'] = $this->config->get('snap_client_key');
+    $data['merchant_id'] = $this->config->get('snap_merchant_id');
     $data['text_loading'] = $this->language->get('text_loading');
 
   	$data['process_order'] = $this->url->link('payment/snap/process_order');
@@ -62,6 +72,7 @@ class ControllerPaymentSnap extends Controller {
 
     $order_info = $this->model_checkout_order->getOrder(
       $this->session->data['order_id']);
+
     //error_log(print_r($order_info,TRUE));
     error_log($this->config->get('snap_snap_challenge_mapping'));
 
@@ -213,25 +224,45 @@ class ControllerPaymentSnap extends Controller {
     Veritrans_Config::$isSanitized = true;
 
     $credit_card['secure'] = true;
-    $credit_card['save_card'] = true;
+
+    error_log('snap oneclick value  ='.$this->config->get('snap_oneclick'));
+    
+    if($this->config->get('snap_oneclick') == 1){
+      $credit_card['save_card'] = true;
+      $payloads['user_id'] = crypt( $order_info['email'], $serverKey );
+    }
 
     $payloads = array();
     $payloads['transaction_details'] = $transaction_details;
     $payloads['item_details']        = $item_details;
     $payloads['customer_details']    = $customer_details;
-    
-    error_log('snap oneclick value  ='.$this->config->get('snap_oneclick'));
-    
-    if($this->config->get('snap_oneclick') == 1){
-      $payloads['credit_card'] = $credit_card;
-      $payloads['user_id'] = crypt( $order_info['email'], $serverKey );;
-    }
-    
+  
+    $payloads['credit_card'] = $credit_card;
 
-    
+    $custom_field = array();
+    $custom_field[1] = $this->config->get('snap_custom_field1');
+    $custom_field[2] = $this->config->get('snap_custom_field2');
+    $custom_field[3] = $this->config->get('snap_custom_field3');
+
+    $expiry_unit = $this->config->get('snap_expiry_unit');
+    $expiry_duration = $this->config->get('snap_expiry_duration');
+
+    if (!empty($expiry_unit) && !empty($expiry_duration)){
+          $time = time();
+          $payloads['expiry'] = array(
+            'start_time' => date("Y-m-d H:i:s O",$time), 
+            'unit' => $expiry_unit, 
+            'duration'  => $expiry_duration
+          );
+    }
+
+    if(!empty($custom_field[1])){$payloads['custom_field1'] = $custom_field[1];}
+    if(!empty($custom_field[2])){ $payloads['custom_field2'] = $custom_field[2];}
+    if(!empty($custom_field[3])){ $payloads['custom_field3'] = $custom_field[3];}
 
     try {
       error_log(print_r($payloads,TRUE));
+      error_log(json_encode($payloads));
       $snapToken = Veritrans_Snap::getSnapToken($payloads);      
       error_log($snapToken);    
       //$this->response->setOutput($redirUrl);
@@ -256,7 +287,6 @@ class ControllerPaymentSnap extends Controller {
     $redirUrl = $this->config->get('config_ssl');
 
     //$this->cart->clear();
-
     Veritrans_Config::$serverKey = $this->config->get('snap_server_key');
     Veritrans_Config::$isProduction = $this->config->get('snap_environment') == 'production' ? true : false;
 
@@ -266,17 +296,62 @@ class ControllerPaymentSnap extends Controller {
     ///error_log("json_decode");
     //error_log(print_r(json_decode($result_data),TRUE));
     
-    $response = isset($_POST['result_data']) ? json_decode($_POST['result_data']) : json_decode($_POST['response']);
-    error_log(print_r($response,TRUE));
+
+    if (isset($_POST['result_data'])) {
+      # code...
+      $response = isset($_POST['result_data']) ? json_decode($_POST['result_data']) : json_decode($_POST['response']);
+      error_log(print_r($response,TRUE));
+      $transaction_status = $response->transaction_status;
+      $payment_type = $response->payment_type;
+
+    } else if(isset($_GET['?id'])){
+
+      $id = isset($_GET['?id']) ? $_GET['?id'] : null;
+      $bca_status = Veritrans_Transaction::status($id);
+      $transaction_status = null;
+      error_log(print_r($bca_status,TRUE));
+      $payment_type = $bca_status->payment_type;
+    }
+
     //error_log($response->va_numbers[0]->bank);
     $base_url = $this->config->get('snap_environment') == 'production' 
     ? "https://app.veritrans.co.id" : "https://app.sandbox.veritrans.co.id";
+
+    $channel = array("bank_transfer", "echannel", "cstore","xl_tunai","bca_klikbca");
     
-    $transaction_status = $response->transaction_status;
-    $payment_type = $response->payment_type;
-    $channel = array("bank_transfer", "echannel", "cstore","xl_tunai");
-    
-    if( $transaction_status == 'capture' || $transaction_status == 'settlement') {
+    if($payment_type == "bca_klikpay"){
+
+        if($bca_status->transaction_status == "settlement")
+          {
+            $data['data']= array(
+            'payment_type' => "bca_klikpay",    
+            'payment_method' => "BCA KlikPay",  
+            'payment_status'  => "Success"
+            );   
+            $this->cart->clear();
+
+            $data['column_left'] = $this->load->controller('common/column_left');
+            $data['column_right'] = $this->load->controller('common/column_right');
+            $data['content_top'] = $this->load->controller('common/content_top');
+            $data['content_bottom'] = $this->load->controller('common/content_bottom');
+            $data['footer'] = $this->load->controller('common/footer');
+            $data['header'] = $this->load->controller('common/header');
+            
+            if (VERSION > 2.1 ) {
+
+              $this->response->setOutput($this->load->view('payment/snap_exec',$data));
+            }
+            else{
+              $this->response->setOutput($this->load->view('default/template/payment/snap_exec.tpl',$data));  
+            }
+          }
+          else{
+            $redirUrl = $this->url->link('payment/snap/failure','','SSL');
+            $this->response->redirect($redirUrl); 
+          }   
+
+    }
+    else if( $transaction_status == 'capture' || $transaction_status == 'settlement') {
       //if capture or pending or challenge or settlement, redirect to order received page
 
       //$this->model_checkout_order->addOrderHistory($this->session->data['order_id'],2);
@@ -309,6 +384,7 @@ class ControllerPaymentSnap extends Controller {
       6.  You will receive an SMS confirmation from XL";
       
       switch ($payment_type) {
+
         case "bank_transfer":
              
           if($check->transaction_status == "settlement"){
@@ -381,6 +457,23 @@ class ControllerPaymentSnap extends Controller {
             );         
 
             break;
+          case "bca_klikbca":
+
+          $this->cart->clear();
+          if($check->transaction_status == "settlement"){
+
+              $this->model_checkout_order->addOrderHistory($this->session->data['order_id'],2);
+              $redirUrl = $this->url->link('checkout/success&');
+              $this->response->redirect($redirUrl);
+              
+            }
+
+            $data['data']= array(
+            'payment_type' => $payment_type,
+            'payment_method' => "Klik BCA", 
+            );         
+
+            break;
         case "xl_tunai":
             
             
@@ -423,7 +516,12 @@ class ControllerPaymentSnap extends Controller {
       $data['content_bottom'] = $this->load->controller('common/content_bottom');
       $data['footer'] = $this->load->controller('common/footer');
       $data['header'] = $this->load->controller('common/header');
-      $this->response->setOutput($this->load->view('default/template/payment/snap_exec.tpl',$data));
+      if (VERSION > 2.1 ) {
+        $this->response->setOutput($this->load->view('payment/snap_exec',$data));
+      }
+      else{
+        $this->response->setOutput($this->load->view('default/template/payment/snap_exec.tpl',$data));  
+      }
 
     }
     else{
@@ -455,8 +553,16 @@ class ControllerPaymentSnap extends Controller {
     if (file_exists(DIR_TEMPLATE . $this->config->get('config_template') . '/template/payment/snap_checkout_failure.tpl')) {
       $this->response->setOutput($this->load->view($this->config->get('config_template') . '/template/payment/snap_checkout_failure.tpl', $data));
     } else {
-      $this->response->setOutput($this->load->view('default/template/payment/snap_checkout_failure.tpl', $data));
+
+      if (VERSION > 2.1 ) {
+        $this->response->setOutput($this->load->view('payment/snap_checkout_failure',$data));
+      }
+      else{
+        $this->response->setOutput($this->load->view('default/template/payment/snap_checkout_failure.tpl', $data));
+      }
+      
     }
+
   }
 
   // Response early with 200 OK status for Midtrans notification & handle HTTP GET
@@ -545,5 +651,14 @@ class ControllerPaymentSnap extends Controller {
           }
     }
     //error_log($logs); //debugan to be commented
+  }
+  public function payment_cancel() {
+    
+    $this->load->model('checkout/order');
+    error_log($this->session->data['order_id']);
+    $current_order_id = $this->session->data['order_id'];
+    $this->model_checkout_order->addOrderHistory($current_order_id,7,'Cancel from snap close.');
+    error_log('cancel order'. $this->session->data['order_id']. 'success');
+    echo 'ok';
   }
 }

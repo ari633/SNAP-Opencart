@@ -24,8 +24,18 @@ class ControllerPaymentSnapmigs extends Controller {
 
   public function index() {
 
+    if ($this->request->server['HTTPS']) {
+      $data['base'] = $this->config->get('config_ssl');
+    } else {
+      $data['base'] = $this->config->get('config_url');
+    }
+
     $data['errors'] = array();
     $data['button_confirm'] = $this->language->get('button_confirm');
+    $env = $this->config->get('snapmigs_environment') == 'production' ? true : false;
+
+    $data['mixpanel_key'] = $env == true ? "17253088ed3a39b1e2bd2cbcfeca939a" : "9dcba9b440c831d517e8ff1beff40bd9";
+    $data['merchant_id'] = $this->config->get('snapmigs_merchant_id');
 
     $data['pay_type'] = 'snapmigs';
     $data['environment'] = $this->config->get('snapmigs_environment');
@@ -205,19 +215,19 @@ class ControllerPaymentSnapmigs extends Controller {
     Veritrans_Config::$serverKey = $serverKey;
 
     Veritrans_Config::$isProduction =
-        $this->config->get('snapio_environment') == 'production'
+        $this->config->get('snapmigs_environment') == 'production'
         ? true : false;
 
     Veritrans_Config::$is3ds = TRUE;
 
     Veritrans_Config::$isSanitized =
-        $this->config->get('snapio_sanitization') == 'on'
+        $this->config->get('snapmigs_sanitization') == 'on'
         ? true : false;
 
 
     $credit_card['channel'] = "migs";
     $credit_card['bank'] = $this->config->get('snapmigs_bank');
-
+    $credit_card['secure'] = true;
 
     $payloads = array();
     $payloads['transaction_details'] = $transaction_details;
@@ -228,7 +238,6 @@ class ControllerPaymentSnapmigs extends Controller {
 
     if($this->config->get('snapmigs_oneclick') == 1){
 
-      $credit_card['secure'] = true;
       $credit_card['save_card'] = true;
       $payloads['credit_card'] = $credit_card;
       $payloads['user_id'] = crypt( $order_info['email'], $serverKey );;

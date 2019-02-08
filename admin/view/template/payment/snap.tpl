@@ -78,7 +78,19 @@
 		</div>
 	</div>
 	<!-- Environment (v2-specific) -->
-						
+	
+	<div class="form-group required v2_settings sensitive">
+	  <label class="col-sm-2 control-label" for="input-merchant-id"><?php echo $entry_merchant_id; ?></label>
+	    <div class="col-sm-3">
+		  <input type="text" name="snap_merchant_id" value="<?php echo $snap_merchant_id; ?>" id="input-merchant-id" class="form-control" />
+		</div>
+		<div class="col-sm-3">
+		 <?php if (isset($error['merchant_id'])) { ?>
+			<div class="col-sm-3"> <?php echo $error['merchant_id']; ?> </div>
+		 <?php } ?>
+		</div>
+	</div>
+
 	<div class="form-group required v2_settings sensitive">
 	  <label class="col-sm-2 control-label" for="input-merchant-id"><?php echo $entry_client_key; ?></label>
 	    <div class="col-sm-3">
@@ -117,7 +129,45 @@
 		  </select>
 		</div>
 	 </div>
-	 <!-- Server Key (v2-specific) -->
+	 <!-- One Click -->
+
+	 <div class="form-group v2_settings sensitive">
+	  <label class="col-sm-2 control-label" for="input-mode"><?php echo $entry_expiry; ?></label>
+	    <div class="col-sm-3">
+			<input type="text" name="snap_expiry_duration" placeholder="filled with number"  value="<?php echo $snap_expiry_duration; ?>" id="input-merchant-id" class="form-control" />
+		</div>
+	    <div class="col-sm-3">
+		  <select name="snap_expiry_unit" id="input-mode" class="form-control">
+		    <?php $options = array('minutes' => 'minutes', 'hour' => 'hour','day' => 'day') ?>
+			<?php foreach ($options as $key => $value): ?>
+			  <option value="<?php echo $key ?>" <?php if ($key == $snap_expiry_duration) echo 'selected' ?> ><?php echo $value ?></option>
+			<?php endforeach ?>
+		  </select>
+		</div>
+		<div class="col-sm-3">
+		<?php if (isset($error['environment'])) { ?>
+		  <div class="col-sm-3"> <?php echo $error['environment']; ?> </div>
+		<?php } ?>
+		</div>
+	</div>
+	<!-- custom expiry -->
+
+	<div class="form-group required">
+	 <label class="col-sm-2 control-label" for="input-merchant-id"><?php echo $entry_custom_field; ?></label>
+	  <div class="col-sm-3">
+	   <input type="text" name="snap_custom_field1" value="<?php echo $snap_custom_field1; ?>" class="form-control" />
+	   <span> 'This will allow you to set custom fields that will be displayed on Midtrans dashboard.</span>
+	  </div>
+	  <div class="col-sm-3">
+	   <input type="text" name="snap_custom_field2" value="<?php echo $snap_custom_field2; ?>" class="form-control" />
+	  </div>
+	  <div class="col-sm-3">
+	   <input type="text" name="snap_custom_field3" value="<?php echo $snap_custom_field3; ?>" class="form-control" />
+	  </div>
+	  <div class="col-sm-12">
+	  </div>
+	</div>
+	<!-- custom field  -->
 
 	<div class="form-group required">
 	 <label class="col-sm-2 control-label" for="input-merchant-id"><?php echo $entry_currency_conversion; ?></label>
@@ -158,7 +208,7 @@
 	</div>
 	
 	<div>
-	 <center><font size="1">version 0.1</font></center>
+	 <center><font size="1">version 1.1</font></center>
 	</div>
 
    </form>
